@@ -30,7 +30,7 @@ func doculint(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	for _, file := range pass.Files {
-		if file.Name.Name == pass.Pkg.Name() {
+		if pass.Pkg.Name() != "main" && file.Name.Name == pass.Pkg.Name() {
 			packageHasCorrespondingFile = true
 
 			if file.Doc == nil {
@@ -46,6 +46,16 @@ func doculint(pass *analysis.Pass) (interface{}, error) {
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch expr := n.(type) {
 			case *ast.FuncDecl:
+				if pass.Pkg.Name() == "main" && expr.Name.Name == "main" {
+					// Ignore func main in main package.
+					return true
+				}
+
+				if expr.Name.Name == "init" {
+					// Ignore init functions.
+					return true
+				}
+
 				if expr.Doc == nil {
 					pass.Reportf(expr.Pos(), "function \"%s\" has no comment associated with it", expr.Name.Name)
 					return true
