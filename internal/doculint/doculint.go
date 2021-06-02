@@ -20,25 +20,35 @@ var Analyzer = analysis.Analyzer{
 // doculint is the function that gets passed to the Analyzer which runs the actual
 // analysis for the doculint linter on a set of files.
 func doculint(pass *analysis.Pass) (interface{}, error) {
-	// packageHasCorrespondingFile is a boolean that denotes whether or not the package
-	// has a corresponding file with the same name. This is necessary because it is
-	// convention that the package comment lives in this file.
-	var packageHasCorrespondingFile bool
+	// packageWithSameNameFile keep track of which packages have a file with the same
+	// name as the package and which do not (the convention is that this file will
+	// contain the package documentation).
+	packageWithSameNameFile := make(map[string]bool)
 
 	if msg := validatePackageName(pass.Pkg.Name()); msg != "" {
 		pass.Reportf(0, msg)
 	}
 
 	for _, file := range pass.Files {
-		if pass.Pkg.Name() != "main" && file.Name.Name == pass.Pkg.Name() {
-			packageHasCorrespondingFile = true
+		if pass.Pkg.Name() != "main" {
+			// Ignore the main package, it doesn't need a package comment.
 
-			if file.Doc == nil {
-				pass.Reportf(0, "package \"%s\" has no comment associated with it in \"%s.go\"", pass.Pkg.Name(), pass.Pkg.Name())
-			} else {
-				expectedPrefix := fmt.Sprintf("Package %s", pass.Pkg.Name())
-				if !strings.HasPrefix(strings.TrimSpace(file.Doc.Text()), expectedPrefix) {
-					pass.Reportf(0, "comment for package \"%s\" should begin with \"%s\"", pass.Pkg.Name(), expectedPrefix)
+			// Add this package to packageWithSameNameFile if it does not already
+			// exist.
+			if _, exists := packageWithSameNameFile[pass.Pkg.Name()]; !exists {
+				packageWithSameNameFile[pass.Pkg.Name()] = false
+			}
+
+			if file.Name.Name == pass.Pkg.Name() {
+				packageWithSameNameFile[pass.Pkg.Name()] = true
+
+				if file.Doc == nil {
+					pass.Reportf(0, "package \"%s\" has no comment associated with it in \"%s.go\"", pass.Pkg.Name(), pass.Pkg.Name())
+				} else {
+					expectedPrefix := fmt.Sprintf("Package %s", pass.Pkg.Name())
+					if !strings.HasPrefix(strings.TrimSpace(file.Doc.Text()), expectedPrefix) {
+						pass.Reportf(0, "comment for package \"%s\" should begin with \"%s\"", pass.Pkg.Name(), expectedPrefix)
+					}
 				}
 			}
 		}
@@ -154,8 +164,10 @@ func doculint(pass *analysis.Pass) (interface{}, error) {
 		})
 	}
 
-	if !packageHasCorrespondingFile {
-		pass.Reportf(0, "package \"%s\" has no file with the same name containing package comment", pass.Pkg.Name())
+	for pkg := range packageWithSameNameFile {
+		if !packageWithSameNameFile[pkg] {
+			pass.Reportf(0, "package \"%s\" has no file with the same name containing package comment", pkg)
+		}
 	}
 
 	return nil, nil
@@ -165,11 +177,11 @@ func doculint(pass *analysis.Pass) (interface{}, error) {
 // be read about here: https://blog.golang.org/package-names
 func validatePackageName(pkg string) string {
 	if strings.ContainsAny(pkg, "_-") {
-		return fmt.Sprintf("package \"%s\" should not contain - or _ in name")
+		return fmt.Sprintf("package \"%s\" should not contain - or _ in name", pkg)
 	}
 
 	if pkg != strings.ToLower(pkg) {
-		return fmt.Sprintf("package \"%s\" should be all lowercase")
+		return fmt.Sprintf("package \"%s\" should be all lowercase", pkg)
 	}
 
 	return ""
