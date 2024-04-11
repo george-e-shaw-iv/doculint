@@ -1,3 +1,5 @@
+# Moved to and maintained under https://github.com/getoutreach/lintroller
+
 # doculint
 
 A Go linter that focuses on proper commenting.
